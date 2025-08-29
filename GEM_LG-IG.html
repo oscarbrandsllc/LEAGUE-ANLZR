@@ -54,8 +54,13 @@
         
         .chart-container {
             position: relative;
-            height: 450px;
+            height: 300px;
             width: 100%;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 450px;
+            }
         }
 
         .rank-grid-item {
@@ -81,14 +86,14 @@
     <div class="max-w-7xl mx-auto space-y-8">
         <!-- Header -->
         <header class="text-center space-y-4">
-            <h1 class="text-4xl md:text-5xl font-bold tracking-wider">Dynasty League Power Rankings</h1>
+            <h1 class="text-2xl md:text-3xl font-bold tracking-wider">Dynasty League Power Rankings</h1>
             <p class="text-lg text-gray-400">An infographic breakdown of your team's value using KTC metrics.</p>
         </header>
 
         <!-- Controls -->
         <div class="glass-panel p-4 flex flex-col md:flex-row items-center justify-center gap-4">
-            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full md:w-auto">
-            <select id="leagueSelect" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full md:w-auto" disabled>
+            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 focus:ring-0 w-full md:w-auto">
+            <select id="leagueSelect" class="hidden bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 focus:ring-0 w-full md:w-auto" disabled>
                 <option>Select a league...</option>
             </select>
             <button id="fetchDataButton" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full md:w-auto">Analyze League</button>
@@ -101,6 +106,9 @@
 
         <!-- Main Content -->
         <main id="infographicContent" class="hidden space-y-12">
+            <!-- Summary Boxes -->
+            <section id="summarySection" class="grid grid-cols-2 sm:grid-cols-4 gap-4"></section>
+
             <!-- Top Level Charts -->
             <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div class="glass-panel p-6">
@@ -117,10 +125,18 @@
                 </div>
             </section>
 
-            <!-- Detailed Starter Rankings -->
+            <!-- Positional Comparison Radar -->
             <section class="glass-panel p-6">
-                <h2 class="text-2xl text-center mb-6">Starting Position Power Grid</h2>
-                <div id="starterRankingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <h2 class="text-2xl text-center mb-4">Top 2 Positional Value vs League Avg</h2>
+                <div class="chart-container">
+                    <canvas id="positionalRadarChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Detailed Starter Rankings -->
+            <section class="glass-panel p-4">
+                <h2 class="text-xl text-center mb-4">Starting Position Power Grid</h2>
+                <div id="starterRankingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     <!-- Grid items will be injected here by JavaScript -->
                 </div>
             </section>
@@ -150,9 +166,10 @@
         const loadingIndicator = document.getElementById('loading');
         const infographicContent = document.getElementById('infographicContent');
         const starterRankingsGrid = document.getElementById('starterRankingsGrid');
+        const summarySection = document.getElementById('summarySection');
 
         // --- Chart instances ---
-        let overallChart, startersChart;
+        let overallChart, startersChart, radarChart;
 
         // --- State ---
         let state = {
@@ -190,36 +207,40 @@
                 return;
             }
 
+            // Fetch leagues if username changed or no username stored
+            if (!state.username || username.toLowerCase() !== state.username.toLowerCase()) {
+                leagueSelect.classList.add('hidden');
+                leagueSelect.disabled = true;
+                setLoading(true);
+                infographicContent.classList.add('hidden');
+                try {
+                    await fetchAndSetUser(username);
+                    await fetchUserLeagues(state.userId);
+                    populateLeagueSelect(state.leagues);
+                    state.username = username;
+                } catch (error) {
+                    console.error('Error fetching leagues:', error);
+                    alert(`An error occurred: ${error.message}`);
+                } finally {
+                    setLoading(false);
+                }
+                return; // wait for league selection
+            }
+
+            const leagueId = leagueSelect.value;
+            if (!leagueId || leagueId === 'Select a league...') {
+                alert('Please select a league to analyze.');
+                return;
+            }
+
             setLoading(true);
             infographicContent.classList.add('hidden');
 
             try {
-                if (username.toLowerCase() !== state.username?.toLowerCase()) {
-                    await fetchAndSetUser(username);
-                    await fetchUserLeagues(state.userId);
-                    populateLeagueSelect(state.leagues);
-                    if (state.leagues.length > 0) {
-                        leagueSelect.selectedIndex = 1;
-                    }
-                    state.username = username;
-                }
-
-                const leagueId = leagueSelect.value;
-                if (!leagueId || leagueId === 'Select a league...') {
-                    if (leagueSelect.selectedIndex > 0) {} else {
-                        alert('Please select a league to analyze.');
-                        setLoading(false);
-                        return;
-                    }
-                }
-                
                 state.currentLeagueId = leagueId;
-
                 if (Object.keys(state.players).length === 0) await fetchSleeperPlayers();
                 if (Object.keys(state.oneQbData).length === 0) await fetchDataFromGoogleSheet();
-
                 await analyzeLeague();
-
             } catch (error) {
                 console.error('Error fetching data:', error);
                 alert(`An error occurred: ${error.message}`);
@@ -259,6 +280,7 @@
                 leagueSelect.appendChild(opt);
             });
             leagueSelect.disabled = false;
+            leagueSelect.classList.remove('hidden');
         }
         
         async function fetchSleeperPlayers() {
@@ -320,10 +342,17 @@
             ]);
 
             const teams = processLeagueData(rosters, users, tradedPicks, leagueInfo);
-            
+            const userTeam = teams.find(t => t.isUserTeam);
+            const sortedStarters = [...teams].sort((a, b) =>
+                Object.values(b.startersPositional).reduce((s,v)=>s+v,0) -
+                Object.values(a.startersPositional).reduce((s,v)=>s+v,0)
+            );
+
             infographicContent.classList.remove('hidden');
-            renderCharts(teams);
+            renderCharts(teams, sortedStarters);
+            renderRadarChart(userTeam, teams);
             renderStarterGrid(teams, leagueInfo);
+            renderSummary(userTeam, teams, sortedStarters);
         }
 
         function processLeagueData(rosters, users, tradedPicks, leagueInfo) {
@@ -399,7 +428,7 @@
                 .map(p => ({ ...p, label: `${p.season} Mid ${ordinal(p.round)}` }));
         }
         
-        function renderCharts(teams) {
+        function renderCharts(teams, sortedStarters) {
             const labels = teams.map(t => t.teamName);
             
             const chartOptions = (isOverall = false) => ({
@@ -468,10 +497,6 @@
             });
 
             // Starters Chart
-            const sortedStarters = [...teams].sort((a, b) => 
-                Object.values(b.startersPositional).reduce((s,v)=>s+v,0) - 
-                Object.values(a.startersPositional).reduce((s,v)=>s+v,0)
-            );
             if (startersChart) startersChart.destroy();
             startersChart = new Chart(document.getElementById('startersValueChart'), {
                 type: 'bar',
@@ -537,21 +562,21 @@
                 slotData.sort((a, b) => b.ktcValue - a.ktcValue);
 
                 const gridItem = document.createElement('div');
-                gridItem.className = 'glass-panel p-4 rank-grid-item';
+                gridItem.className = 'glass-panel p-3 rank-grid-item text-sm';
 
-                let content = `<h3 class="text-xl font-bold text-center mb-3">${slotPosition.replace('_', ' ')} ${slotIndex}</h3><ul>`;
+                let content = `<h3 class=\"text-lg font-bold text-center mb-2\">${slotPosition.replace('_', ' ')} ${slotIndex}</h3><ul>`;
                 slotData.forEach((data, index) => {
                     const rank = index + 1;
                     const color = getRankColor(rank, teams.length);
                     content += `
-                        <li class="flex justify-between items-center text-sm power-grid-row">
+                        <li class="flex justify-between items-center text-xs power-grid-row">
                             <div class="flex items-center w-2/3">
                                 <span class="font-bold w-6 flex-shrink-0" style="color: ${color};">${rank}.</span>
                                 <span class="truncate">${data.teamName}</span>
                             </div>
                             <div class="text-right w-1/3">
                                 <span class="font-semibold" style="color: ${color};">${data.ktcValue.toLocaleString()}</span>
-                                <p class="text-xs text-gray-400 truncate">${data.playerName}</p>
+                                <p class="text-[10px] text-gray-400 truncate">${data.playerName}</p>
                             </div>
                         </li>
                     `;
@@ -559,6 +584,88 @@
                 content += '</ul>';
                 gridItem.innerHTML = content;
                 starterRankingsGrid.appendChild(gridItem);
+            });
+        }
+
+        function renderSummary(userTeam, teams, sortedStarters) {
+            const overallRank = teams.findIndex(t => t.isUserTeam) + 1;
+            const startersRank = sortedStarters.findIndex(t => t.isUserTeam) + 1;
+            const topPlayerId = (userTeam.roster.players || [])
+                .map(id => ({ id, val: getKtcValue(id) }))
+                .sort((a,b) => b.val - a.val)[0]?.id;
+            const topInfo = state.players[topPlayerId] || {};
+            const topName = topInfo.first_name ? `${topInfo.first_name} ${topInfo.last_name}` : 'N/A';
+            const topVal = getKtcValue(topPlayerId);
+
+            const boxes = [
+                { label: 'Overall Rank', value: `#${overallRank}` },
+                { label: 'Total KTC', value: userTeam.totalValue.toLocaleString() },
+                { label: 'Starters Rank', value: `#${startersRank}` },
+                { label: 'Top Player', value: `${topName} (${topVal.toLocaleString()})` }
+            ];
+
+            summarySection.innerHTML = boxes.map(b => `
+                <div class="glass-panel p-4 text-center">
+                    <p class="text-xs text-gray-400">${b.label}</p>
+                    <p class="text-lg font-bold">${b.value}</p>
+                </div>
+            `).join('');
+        }
+
+        function getTopTwoPositionalValues(team) {
+            const positions = ['QB','RB','WR','TE'];
+            const result = { QB:0, RB:0, WR:0, TE:0 };
+            positions.forEach(pos => {
+                const players = (team.roster.players || []).filter(id => state.players[id]?.position === pos);
+                const topTwo = players.map(id => getKtcValue(id)).sort((a,b)=>b-a).slice(0,2);
+                result[pos] = topTwo.reduce((s,v)=>s+v,0);
+            });
+            return result;
+        }
+
+        function renderRadarChart(userTeam, teams) {
+            const userPos = getTopTwoPositionalValues(userTeam);
+            const avg = { QB:0, RB:0, WR:0, TE:0 };
+            teams.forEach(t => {
+                const vals = getTopTwoPositionalValues(t);
+                Object.keys(avg).forEach(k => avg[k] += vals[k]);
+            });
+            Object.keys(avg).forEach(k => avg[k] = avg[k] / teams.length);
+
+            if (radarChart) radarChart.destroy();
+            radarChart = new Chart(document.getElementById('positionalRadarChart'), {
+                type: 'radar',
+                data: {
+                    labels: ['QB','RB','WR','TE'],
+                    datasets: [
+                        {
+                            label: 'Your Team',
+                            data: [userPos.QB, userPos.RB, userPos.WR, userPos.TE],
+                            backgroundColor: 'rgba(180,105,255,0.2)',
+                            borderColor: 'rgba(180,105,255,1)'
+                        },
+                        {
+                            label: 'League Avg',
+                            data: [avg.QB, avg.RB, avg.WR, avg.TE],
+                            backgroundColor: 'rgba(0,235,199,0.2)',
+                            borderColor: 'rgba(0,235,199,1)'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { labels: { color: '#EAEBF0' } }
+                    },
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255,255,255,0.1)' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            pointLabels: { color: '#EAEBF0' },
+                            ticks: { display: false }
+                        }
+                    }
+                }
             });
         }
         
