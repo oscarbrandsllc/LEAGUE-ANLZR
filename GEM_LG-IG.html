@@ -54,8 +54,11 @@
         
         .chart-container {
             position: relative;
-            height: 450px;
             width: 100%;
+            height: 300px;
+        }
+        @media (min-width: 768px) {
+            .chart-container { height: 450px; }
         }
 
         .rank-grid-item {
@@ -68,7 +71,7 @@
 
         .power-grid-row {
             border-bottom: 1px solid rgba(128, 138, 189, 0.1);
-            padding: 0.5rem 0.25rem;
+            padding: 0.25rem 0.25rem;
         }
         .power-grid-row:last-child {
             border-bottom: none;
@@ -78,22 +81,47 @@
 <body class="p-4 md:p-8">
     <div id="starfield"></div>
 
-    <div class="max-w-7xl mx-auto space-y-8">
+    <div class="max-w-7xl mx-auto space-y-6">
         <!-- Header -->
-        <header class="text-center space-y-4">
-            <h1 class="text-4xl md:text-5xl font-bold tracking-wider">Dynasty League Power Rankings</h1>
+        <header class="text-center space-y-2">
+            <h1 class="text-2xl md:text-4xl font-bold tracking-wider">Dynasty League Power Rankings</h1>
             <p class="text-lg text-gray-400">An infographic breakdown of your team's value using KTC metrics.</p>
         </header>
 
-        <!-- Controls -->
-        <div class="glass-panel p-4 flex flex-col md:flex-row items-center justify-center gap-4">
-            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full md:w-auto">
-            <select id="leagueSelect" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 w-full md:w-auto" disabled>
+        <!-- Username Controls -->
+        <div id="userControls" class="glass-panel p-4 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <input type="text" id="usernameInput" placeholder="Enter Sleeper Username" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 focus:ring-0 w-full sm:w-auto">
+            <button id="submitUsernameButton" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full sm:w-auto">Load Leagues</button>
+        </div>
+
+        <!-- League Controls -->
+        <div id="leagueControls" class="glass-panel p-4 flex flex-col sm:flex-row items-center justify-center gap-4 hidden">
+            <select id="leagueSelect" class="bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 focus:ring-0 w-full sm:w-auto">
                 <option>Select a league...</option>
             </select>
-            <button id="fetchDataButton" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full md:w-auto">Analyze League</button>
+            <button id="fetchDataButton" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition-colors w-full sm:w-auto">Analyze League</button>
         </div>
-        
+
+        <!-- Summary Section -->
+        <section id="summarySection" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="glass-panel p-4 text-center">
+                <p class="text-xs text-gray-400">League Rank</p>
+                <p id="summaryRank" class="text-lg font-bold"></p>
+            </div>
+            <div class="glass-panel p-4 text-center">
+                <p class="text-xs text-gray-400">Total KTC</p>
+                <p id="summaryTotal" class="text-lg font-bold"></p>
+            </div>
+            <div class="glass-panel p-4 text-center">
+                <p class="text-xs text-gray-400">Starters Rank</p>
+                <p id="summaryStartersRank" class="text-lg font-bold"></p>
+            </div>
+            <div class="glass-panel p-4 text-center">
+                <p class="text-xs text-gray-400">Top Player</p>
+                <p id="summaryTopPlayer" class="text-lg font-bold"></p>
+            </div>
+        </section>
+
         <!-- Loading Indicator -->
         <div id="loading" class="hidden text-center py-8">
             <p class="text-2xl animate-pulse">Analyzing cosmic data streams...</p>
@@ -117,10 +145,18 @@
                 </div>
             </section>
 
-            <!-- Detailed Starter Rankings -->
+            <!-- Positional Comparison Radar -->
             <section class="glass-panel p-6">
-                <h2 class="text-2xl text-center mb-6">Starting Position Power Grid</h2>
-                <div id="starterRankingsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <h2 class="text-2xl text-center mb-4">Top 2 Positional Strength</h2>
+                <div class="chart-container">
+                    <canvas id="posComparisonChart"></canvas>
+                </div>
+            </section>
+
+            <!-- Detailed Starter Rankings -->
+            <section class="glass-panel p-4">
+                <h2 class="text-2xl text-center mb-4">Starting Position Power Grid</h2>
+                <div id="starterRankingsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 text-sm">
                     <!-- Grid items will be injected here by JavaScript -->
                 </div>
             </section>
@@ -145,14 +181,22 @@
 
         // --- DOM Elements ---
         const usernameInput = document.getElementById('usernameInput');
+        const submitUsernameButton = document.getElementById('submitUsernameButton');
         const leagueSelect = document.getElementById('leagueSelect');
         const fetchDataButton = document.getElementById('fetchDataButton');
+        const userControls = document.getElementById('userControls');
+        const leagueControls = document.getElementById('leagueControls');
+        const summarySection = document.getElementById('summarySection');
+        const summaryRank = document.getElementById('summaryRank');
+        const summaryTotal = document.getElementById('summaryTotal');
+        const summaryStartersRank = document.getElementById('summaryStartersRank');
+        const summaryTopPlayer = document.getElementById('summaryTopPlayer');
         const loadingIndicator = document.getElementById('loading');
         const infographicContent = document.getElementById('infographicContent');
         const starterRankingsGrid = document.getElementById('starterRankingsGrid');
 
         // --- Chart instances ---
-        let overallChart, startersChart;
+        let overallChart, startersChart, posComparisonChart;
 
         // --- State ---
         let state = {
@@ -180,39 +224,45 @@
 
 
         // --- Event Listeners ---
+        submitUsernameButton.addEventListener('click', handleUsernameSubmit);
         fetchDataButton.addEventListener('click', handleFetchData);
 
         // --- Main Logic ---
-        async function handleFetchData() {
+        async function handleUsernameSubmit() {
             const username = usernameInput.value.trim();
             if (!username) {
                 alert('Please enter a Sleeper username.');
                 return;
             }
+            setLoading(true);
+            infographicContent.classList.add('hidden');
+            summarySection.classList.add('hidden');
+            try {
+                await fetchAndSetUser(username);
+                await fetchUserLeagues(state.userId);
+                populateLeagueSelect(state.leagues);
+                leagueControls.classList.remove('hidden');
+                state.username = username;
+            } catch (error) {
+                console.error('Error fetching leagues:', error);
+                alert(`An error occurred: ${error.message}`);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function handleFetchData() {
+            const leagueId = leagueSelect.value;
+            if (!leagueId || leagueId === 'Select a league...') {
+                alert('Please select a league to analyze.');
+                return;
+            }
 
             setLoading(true);
             infographicContent.classList.add('hidden');
+            summarySection.classList.add('hidden');
 
             try {
-                if (username.toLowerCase() !== state.username?.toLowerCase()) {
-                    await fetchAndSetUser(username);
-                    await fetchUserLeagues(state.userId);
-                    populateLeagueSelect(state.leagues);
-                    if (state.leagues.length > 0) {
-                        leagueSelect.selectedIndex = 1;
-                    }
-                    state.username = username;
-                }
-
-                const leagueId = leagueSelect.value;
-                if (!leagueId || leagueId === 'Select a league...') {
-                    if (leagueSelect.selectedIndex > 0) {} else {
-                        alert('Please select a league to analyze.');
-                        setLoading(false);
-                        return;
-                    }
-                }
-                
                 state.currentLeagueId = leagueId;
 
                 if (Object.keys(state.players).length === 0) await fetchSleeperPlayers();
@@ -320,7 +370,8 @@
             ]);
 
             const teams = processLeagueData(rosters, users, tradedPicks, leagueInfo);
-            
+
+            renderSummary(teams);
             infographicContent.classList.remove('hidden');
             renderCharts(teams);
             renderStarterGrid(teams, leagueInfo);
@@ -328,16 +379,24 @@
 
         function processLeagueData(rosters, users, tradedPicks, leagueInfo) {
             const userMap = users.reduce((acc, user) => ({ ...acc, [user.user_id]: user }), {});
-            
+
             return rosters.map(roster => {
                 const owner = userMap[roster.owner_id];
                 const teamName = owner?.display_name || `Team ${roster.roster_id}`;
-                
+
                 const overallPositional = { QB: 0, RB: 0, WR: 0, TE: 0, Picks: 0 };
+                const playersByPos = { QB: [], RB: [], WR: [], TE: [], all: [] };
                 (roster.players || []).forEach(pId => {
                     const playerInfo = state.players[pId];
-                    if (playerInfo && overallPositional.hasOwnProperty(playerInfo.position)) {
-                        overallPositional[playerInfo.position] += getKtcValue(pId);
+                    if (playerInfo) {
+                        const value = getKtcValue(pId);
+                        if (overallPositional.hasOwnProperty(playerInfo.position)) {
+                            overallPositional[playerInfo.position] += value;
+                            if (playersByPos[playerInfo.position]) {
+                                playersByPos[playerInfo.position].push({ id: pId, name: `${playerInfo.first_name} ${playerInfo.last_name}`, ktc: value });
+                            }
+                        }
+                        playersByPos.all.push({ id: pId, name: `${playerInfo.first_name} ${playerInfo.last_name}`, ktc: value });
                     }
                 });
                 getOwnedPicks(roster.roster_id, tradedPicks, leagueInfo).forEach(p => {
@@ -350,19 +409,21 @@
 
                 starterIds.forEach((pId, index) => {
                     const slot = rosterPositions[index];
-                    // Check if the slot is one of the types we are tracking for the chart.
                     if (startersPositional.hasOwnProperty(slot)) {
                         startersPositional[slot] += getKtcValue(pId);
                     }
                 });
-                
+
+                const startersTotal = Object.values(startersPositional).reduce((a,b)=>a+b,0);
                 const totalValue = Object.values(overallPositional).reduce((a, b) => a + b, 0);
 
                 return {
                     teamName,
                     totalValue,
+                    startersTotal,
                     overallPositional,
                     startersPositional,
+                    playersByPos,
                     roster,
                     isUserTeam: roster.owner_id === state.userId
                 };
@@ -488,6 +549,70 @@
                 },
                 options: chartOptions()
             });
+
+            renderRadarChart(teams);
+        }
+
+        function renderRadarChart(teams) {
+            const userTeam = teams.find(t => t.isUserTeam);
+            if (!userTeam) return;
+
+            const positions = ['QB','RB','WR','TE'];
+            const userValues = positions.map(pos => {
+                const arr = [...userTeam.playersByPos[pos]].sort((a,b)=>b.ktc-a.ktc).slice(0,2);
+                return arr.reduce((sum,p)=>sum+p.ktc,0);
+            });
+            const leagueAverages = positions.map(pos => {
+                const totals = teams.map(team => {
+                    const arr = [...team.playersByPos[pos]].sort((a,b)=>b.ktc-a.ktc).slice(0,2);
+                    return arr.reduce((sum,p)=>sum+p.ktc,0);
+                });
+                return totals.reduce((a,b)=>a+b,0)/teams.length;
+            });
+
+            if (posComparisonChart) posComparisonChart.destroy();
+            posComparisonChart = new Chart(document.getElementById('posComparisonChart'), {
+                type: 'radar',
+                data: {
+                    labels: positions,
+                    datasets: [
+                        { label: userTeam.teamName, data: userValues, backgroundColor: 'rgba(0,235,199,0.2)', borderColor: 'rgba(0,235,199,1)' },
+                        { label: 'League Avg', data: leagueAverages, backgroundColor: 'rgba(118,109,255,0.2)', borderColor: 'rgba(118,109,255,1)' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            angleLines: { color: 'rgba(255,255,255,0.1)' },
+                            grid: { color: 'rgba(255,255,255,0.1)' },
+                            pointLabels: { color: '#EAEBF0', font: { family: "'Roboto', sans-serif" } },
+                            ticks: { backdropColor: 'transparent', color: '#EAEBF0' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#EAEBF0', font: { family: "'Roboto', sans-serif" } } }
+                    }
+                }
+            });
+        }
+
+        function renderSummary(teams) {
+            const totalTeams = teams.length;
+            const userIndex = teams.findIndex(t => t.isUserTeam);
+            const userTeam = teams[userIndex];
+            if (!userTeam) return;
+
+            const startersSorted = [...teams].sort((a,b)=>b.startersTotal - a.startersTotal);
+            const startersRank = startersSorted.findIndex(t => t.isUserTeam) + 1;
+            const topPlayer = [...userTeam.playersByPos.all].sort((a,b)=>b.ktc - a.ktc)[0];
+
+            summaryRank.textContent = `#${userIndex + 1} of ${totalTeams}`;
+            summaryTotal.textContent = userTeam.totalValue.toLocaleString();
+            summaryStartersRank.textContent = `#${startersRank}`;
+            summaryTopPlayer.textContent = topPlayer ? `${topPlayer.name} (${topPlayer.ktc.toLocaleString()})` : 'N/A';
+
+            summarySection.classList.remove('hidden');
         }
 
         function renderStarterGrid(teams, leagueInfo) {
@@ -537,21 +662,21 @@
                 slotData.sort((a, b) => b.ktcValue - a.ktcValue);
 
                 const gridItem = document.createElement('div');
-                gridItem.className = 'glass-panel p-4 rank-grid-item';
+                gridItem.className = 'glass-panel p-3 rank-grid-item';
 
-                let content = `<h3 class="text-xl font-bold text-center mb-3">${slotPosition.replace('_', ' ')} ${slotIndex}</h3><ul>`;
+                let content = `<h3 class="text-lg font-bold text-center mb-2">${slotPosition.replace('_', ' ')} ${slotIndex}</h3><ul>`;
                 slotData.forEach((data, index) => {
                     const rank = index + 1;
                     const color = getRankColor(rank, teams.length);
                     content += `
-                        <li class="flex justify-between items-center text-sm power-grid-row">
+                        <li class="flex justify-between items-center text-xs power-grid-row">
                             <div class="flex items-center w-2/3">
-                                <span class="font-bold w-6 flex-shrink-0" style="color: ${color};">${rank}.</span>
+                                <span class="font-bold w-5 flex-shrink-0" style="color: ${color};">${rank}.</span>
                                 <span class="truncate">${data.teamName}</span>
                             </div>
                             <div class="text-right w-1/3">
                                 <span class="font-semibold" style="color: ${color};">${data.ktcValue.toLocaleString()}</span>
-                                <p class="text-xs text-gray-400 truncate">${data.playerName}</p>
+                                <p class="text-[10px] text-gray-400 truncate">${data.playerName}</p>
                             </div>
                         </li>
                     `;
